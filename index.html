@@ -205,8 +205,12 @@
       <div class="note-box" style="margin-top:14px;">
         <b>Mode video biasa (bukan live streaming):</b> tool ini pakai <code class="inline">videos.insert</code> saja (tanpa <code class="inline">thumbnails.set</code>,
         thumbnail otomatis diambil YouTube dari gambar di dalam video), jadi <b>tidak butuh</b> channel di-enable untuk live streaming
-        dan tidak butuh verifikasi telepon untuk thumbnail custom. Video di-upload sebagai <code class="inline">private</code> dengan
-        <code class="inline">publishAt</code> terjadwal (WIB dikonversi ke UTC) &mdash; otomatis tayang saat jadwalnya tiba.
+        dan tidak butuh verifikasi telepon untuk thumbnail custom. Kalau kolom <code class="inline">privacy</code> diisi <code class="inline">private</code>,
+        video di-upload sebagai <code class="inline">private</code> dengan <code class="inline">publishAt</code> terjadwal (WIB dikonversi ke UTC)
+        &mdash; otomatis tayang saat jadwalnya tiba (baris di-skip kalau jadwalnya sudah lewat). Kalau <code class="inline">privacy</code> diisi
+        <code class="inline">public</code> atau <code class="inline">unlisted</code>, video langsung diupload dengan status itu juga saat itu juga
+        (tanpa <code class="inline">publishAt</code>) &mdash; kolom <code class="inline">date</code>/<code class="inline">time</code> tetap wajib
+        diisi format benar, tapi boleh diisi jam yang sudah lewat, tidak akan di-skip.
         Router pindah akun begitu limit/akun tercapai, dan kalau Google menolak karena kuota, <b>semua akun di Client ID yang sama</b> ditandai penuh
         lalu router lompat ke Client ID lain.
       </div>
@@ -262,12 +266,12 @@
   <!-- SECTION 3: GAMBAR VIDEO 5 DETIK -->
   <section>
     <div class="sec-head">
-      <div class="sec-head-left"><div class="num-badge">3</div><h2>Gambar Video (5 detik)</h2></div>
+      <div class="sec-head-left"><div class="num-badge">3</div><h2>Gambar Video (40 detik)</h2></div>
       <span class="tag-pill" id="imgModePill">Mode: desain otomatis</span>
     </div>
     <div class="sec-body">
       <div class="note-box" style="margin-bottom:14px;">
-        <b>Mode Video:</b> tiap event di-render jadi <b>video WebM 5 detik</b> dari gambar (1280&times;720); thumbnail otomatis diambil YouTube dari frame video.<br>
+        <b>Mode Video:</b> tiap event di-render jadi <b>video WebM 40 detik</b> dari gambar (1280&times;720); thumbnail otomatis diambil YouTube dari frame video.<br>
         <b>Mode Jadwal Live:</b> gambar yang dipilih dipakai sebagai <b>thumbnail JPEG</b> (dijaga &lt; 2 MB) lewat <code class="inline">thumbnails.set</code>; tidak ada video yang dirender.<br>
         &bull; <b>Tanpa upload gambar:</b> desain otomatis dari judul + jadwal tiap event (beda-beda per event).<br>
         &bull; <b>Upload 1 gambar:</b> gambar itu dipakai sama untuk semua event.<br>
@@ -282,8 +286,8 @@
 
       <div id="imageGallery" style="display:none; flex-wrap:wrap; gap:10px; margin-bottom:12px;"></div>
 
-      <label class="checkbox-lbl" id="overlayWrap" style="display:none;margin-bottom:12px;">
-        <input type="checkbox" id="overlayTitleChk"> Tempel judul event di atas gambar upload
+      <label class="checkbox-lbl" id="overlayWrap" style="display:none;margin-bottom:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:12px;">
+        <input type="checkbox" id="overlayTitleChk" checked> <b>&#9997;&#65039; Tempel judul event di atas gambar upload</b> (judul otomatis ditulis di bawah gambar, sesuai judul tiap event)
       </label>
 
       <div class="preview-assets" id="assetPreview"></div>
@@ -499,7 +503,7 @@
   // Default "Limit/akun" mengikuti kuota harian per Client ID sesuai mode: 66 (live) / 100 (video).
   // saveState/restoreState di bawah bisa menimpa ini kalau ada sesi tersimpan (dan mematikan limitAutoManaged).
   limitPerAccount = eventsPerDayPerClient(appMode);
-  var VIDEO_SECONDS = 5;
+  var VIDEO_SECONDS = 40;
   var VIDEO_W = 1280, VIDEO_H = 720;
   // Galeri gambar upload user. Array kosong = mode desain otomatis.
   // Tiap item: { img: HTMLImageElement, url: object URL, name: nama file }
@@ -616,7 +620,7 @@
         'Biaya per event <b>150 unit</b> (jadwal 50 + thumbnail 50 + tag 50) &asymp; <b>' + eventsPerDayPerClient("live") + ' event/hari per Client ID</b>. ' +
         '<b>Syarat:</b> live streaming harus <b>aktif</b> di channel (verifikasi telepon, aktivasi pertama bisa sampai 24 jam) dan channel harus terverifikasi untuk thumbnail. ' +
         'Jadwal harus di masa depan dan &ldquo;cukup dekat&rdquo; (batas Google tidak dipublikasikan, kalau ditolak coba tanggal lebih dekat). Render video tidak dipakai.'
-      : '<b>Mode Upload Video.</b> Tiap event di-render jadi video WebM 5 detik lalu diupload. Kuota: <b>' + eventsPerDayPerClient("video") + ' upload/hari per Client ID</b> (bucket sendiri, 1 unit/upload). ' +
+      : '<b>Mode Upload Video.</b> Tiap event di-render jadi video WebM 40 detik lalu diupload. Kuota: <b>' + eventsPerDayPerClient("video") + ' upload/hari per Client ID</b> (bucket sendiri, 1 unit/upload). ' +
         'Tidak butuh live streaming aktif dan tidak butuh thumbnail terpisah.';
     var pill = document.getElementById("imgModePill");
     if (pill) pill.textContent = (userImages.length ? "Mode: gambar upload (" + userImages.length + ")" : "Mode: desain otomatis") + (live ? " (thumbnail)" : " (video)");
@@ -1825,7 +1829,7 @@
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
   }
 
-  // ================= GAMBAR -> VIDEO 5 DETIK (dirender per event) =================
+  // ================= GAMBAR -> VIDEO 40 DETIK (dirender per event) =================
   function isRecorderSupported(){
     return typeof MediaRecorder !== "undefined" && typeof HTMLCanvasElement !== "undefined" &&
            typeof HTMLCanvasElement.prototype.captureStream === "function";
@@ -1944,7 +1948,7 @@
     } catch (e){ cb("Gagal membuat thumbnail: " + (e.message || e)); }
   }
 
-  // Render satu video WebM 5 detik dari canvas. cb(err, blob).
+  // Render satu video WebM 40 detik dari canvas. cb(err, blob).
   function renderVideoForRow(row, cb){
     if (!isRecorderSupported()){
       cb("Browser ini tidak mendukung MediaRecorder/captureStream (coba Chrome/Edge/Firefox desktop atau Android).");
@@ -2200,9 +2204,29 @@
           }).catch(function(e){ warnings.push("tag: " + (e.message || e)); next(); });
         };
 
-        stepThumb(function(){ stepTags(function(){
+        // ---- tahap 4: paksa ulang privacyStatus lewat videos.update ----
+        // liveBroadcasts.insert kadang diam-diam override privacyStatus jadi "private"
+        // (perilaku YouTube untuk broadcast terjadwal). Set ulang eksplisit di sini
+        // supaya video benar-benar jadi row.privacy, bukan cuma yang dikirim di tahap 1.
+        var stepForcePrivacy = function(next){
+          fetch("https://www.googleapis.com/youtube/v3/videos?part=status", {
+            method: "PUT",
+            headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json; charset=UTF-8" },
+            body: JSON.stringify({ id: videoId, status: { privacyStatus: row.privacy, selfDeclaredMadeForKids: false } })
+          }).then(function(r){
+            costUsed += COST.live.tags;   // biaya videos.update sama seperti tahap tags
+            if (r.ok){ next(); return; }
+            return r.text().then(function(t){
+              var c4 = classifyApiError(r.status, t);
+              warnings.push(c4.quota ? "privacy: kuota habis" : "gagal set ulang privacy (" + r.status + ")");
+              next();
+            });
+          }).catch(function(e){ warnings.push("privacy: " + (e.message || e)); next(); });
+        };
+
+        stepThumb(function(){ stepTags(function(){ stepForcePrivacy(function(){
           cb({ ok: true, videoId: videoId, warnings: warnings, unitsUsed: costUsed, error: warnings.length ? warnings.join("; ") : null });
-        }); });
+        }); }); });
       });
     }).catch(function(e){ cb({ ok: false, error: e.message || String(e) }); });
   }
@@ -2290,8 +2314,23 @@
   // token dioper eksplisit (bukan global) supaya jelas akun mana yang dipakai tiap panggilan.
   function uploadOneEvent(row, token, videoBlob, cb){
     var publishAtUtc = rowUtcIso(row);
-    if (!publishAtUtc){ cb({ ok: false, error: "Format tanggal/jam salah" }); return; }
-    if (isPastUtc(publishAtUtc)){ cb({ ok: false, skipped: true, error: "Tanggal sudah lewat, di-skip" }); return; }
+
+    // privacy != "private" artinya user MEMANG mau video ini langsung tayang sesuai
+    // privacy tsb (public/unlisted) -> upload TANPA publishAt sama sekali, supaya:
+    //   1) tidak pernah di-skip gara-gara "tanggal sudah lewat"
+    //   2) videonya beneran jadi public/unlisted saat itu juga, bukan nyangkut private
+    //   3) kolom date/time boleh kosong sekalipun (tidak wajib diisi untuk mode ini)
+    // privacy == "private" -> tetap pakai jalur scheduled lama (wajib tanggal valid,
+    // wajib private+publishAt kalau jadwalnya di masa depan, di-skip kalau sudah lewat).
+    var wantsImmediate = (row.privacy && row.privacy !== "private");
+    var statusObj;
+    if (wantsImmediate){
+      statusObj = { privacyStatus: row.privacy, selfDeclaredMadeForKids: false };
+    } else {
+      if (!publishAtUtc){ cb({ ok: false, error: "Format tanggal/jam salah" }); return; }
+      if (isPastUtc(publishAtUtc)){ cb({ ok: false, skipped: true, error: "Tanggal sudah lewat, di-skip" }); return; }
+      statusObj = { privacyStatus: "private", publishAt: publishAtUtc, selfDeclaredMadeForKids: false };
+    }
 
     var metadata = {
       snippet: {
@@ -2299,12 +2338,7 @@
         description: row.description,
         tags: row.tags ? row.tags.split(",").map(function(t){ return t.trim(); }).filter(Boolean) : []
       },
-      status: {
-        // Wajib "private" saat insert supaya publishAt bisa auto-publish.
-        privacyStatus: "private",
-        publishAt: publishAtUtc,
-        selfDeclaredMadeForKids: false
-      }
+      status: statusObj
     };
 
     fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
