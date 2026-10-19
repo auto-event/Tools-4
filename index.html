@@ -351,7 +351,7 @@
           <div style="margin-top:8px;">
             <button class="btn-ghost" id="exportKeysBtn" style="width:100%;">&#128273; Unduh Stream Key (Channel, Event, Key)</button>
             <div class="small" style="color:var(--muted);margin-top:6px;">
-              CSV terpisah, hanya berisi nama channel, nama event &amp; stream key. Stream key bersifat rahasia, jangan dibagikan sembarangan.
+              CSV terpisah, hanya berisi nama channel, nama event &amp; stream key. <b>Tiap judul event dapat stream key sendiri (berbeda), walau satu channel</b>; key baru dibuat otomatis kalau belum ada. Stream key bersifat rahasia, jangan dibagikan sembarangan.
             </div>
           </div>
         </div>
@@ -1550,24 +1550,48 @@
           if (!firstStreamId) firstStreamId = it.id;
         });
 
-        // 3) event yang belum terikat
-        var unbound = g.rows.filter(function(r){ return !bound[r.videoId]; });
-        if (unbound.length && firstStreamId){
+        // 3) pastikan SETIAP event punya stream key sendiri (1 event = 1 liveStream baru).
+        //    Event yang belum terikat, atau yang berbagi stream dengan event lain di channel ini, dapat stream baru.
+        var usedStreams = {}, needOwn = [], createdFor = {};
+        g.rows.forEach(function(r){
+          var sid0 = bound[r.videoId];
+          if (!sid0 || usedStreams[sid0]) needOwn.push(r);
+          else usedStreams[sid0] = true;
+        });
+        if (needOwn.length){
           if (wantBind === null){
-            wantBind = confirm("Ada event yang belum terikat ke stream key.\n\nIkat otomatis ke stream key bawaan channel supaya key-nya bisa diambil?\n(OK = ikat, biaya 50 unit kuota per event. Batal = biarkan kosong.)");
+            wantBind = confirm("Ada " + needOwn.length + " event yang belum punya stream key sendiri.\n\nBuat stream key BARU untuk tiap event (1 judul = 1 key berbeda)?\n(OK = buat, biaya sekitar 100 unit kuota per event: buat stream 50 + ikat 50. Batal = biarkan kosong.)");
           }
           if (wantBind){
-            for (var ui = 0; ui < unbound.length; ui++){
-              var ur = unbound[ui];
+            for (var ui = 0; ui < needOwn.length; ui++){
+              var ur = needOwn[ui];
               try {
-                var br = await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?part=id,contentDetails&id=" + encodeURIComponent(ur.videoId) + "&streamId=" + encodeURIComponent(firstStreamId), {
+                var cr = await fetch("https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,contentDetails,status", {
+                  method: "POST",
+                  headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json; charset=UTF-8" },
+                  body: JSON.stringify({
+                    snippet: { title: String(ur.title).slice(0, 100) },
+                    cdn: { frameRate: "variable", ingestionType: "rtmp", resolution: "variable" },
+                    contentDetails: { isReusable: true }
+                  })
+                });
+                used += 50;
+                var ct = await cr.text();
+                if (!cr.ok){
+                  log("✗ Gagal buat stream key untuk \"" + ur.title + "\": (" + cr.status + ") " + ct.slice(0, 140), "error");
+                  await new Promise(function(res){ setTimeout(res, 500); });
+                  continue;
+                }
+                var ns = JSON.parse(ct);
+                streams[ns.id] = ns;
+                var br = await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?part=id,contentDetails&id=" + encodeURIComponent(ur.videoId) + "&streamId=" + encodeURIComponent(ns.id), {
                   method: "POST", headers: { "Authorization": "Bearer " + token }
                 });
                 used += 50;
-                if (br.ok){ bound[ur.videoId] = firstStreamId; }
+                if (br.ok){ bound[ur.videoId] = ns.id; createdFor[ur.videoId] = true; }
                 else { var bt = await br.text(); log("✗ Gagal ikat stream untuk \"" + ur.title + "\": (" + br.status + ") " + bt.slice(0, 120), "error"); }
-              } catch (e){ log("✗ Gagal ikat stream untuk \"" + ur.title + "\": " + (e.message || e), "error"); }
-              await new Promise(function(res){ setTimeout(res, 400); });
+              } catch (e){ log("✗ Gagal stream key \"" + ur.title + "\": " + (e.message || e), "error"); }
+              await new Promise(function(res){ setTimeout(res, 500); });
             }
           }
         }
@@ -1575,12 +1599,17 @@
         // 4) susun hasil
         g.rows.forEach(function(r){
           var sid = bound[r.videoId];
+          // Event yang seharusnya dapat key sendiri tapi pembuatannya gagal/dibatalkan: JANGAN tulis key bersama.
+          if (needOwn.indexOf(r) !== -1 && !createdFor[r.videoId]){
+            result.push([chName, r.title, "", "", wantBind ? "gagal membuat stream key sendiri, lihat Log Output (key bersama tidak ditulis)" : "pembuatan key baru dibatalkan, event ini masih berbagi key dengan event lain"]);
+            return;
+          }
           var st = sid ? streams[sid] : null;
           var info = st && st.cdn && st.cdn.ingestionInfo;
           if (info && info.streamName){
             result.push([chName, r.title, info.streamName, info.ingestionAddress || "", ""]);
           } else if (!sid){
-            result.push([chName, r.title, "", "", firstStreamId ? "belum terikat ke stream key" : "channel belum punya stream key"]);
+            result.push([chName, r.title, "", "", "belum punya stream key sendiri (pembuatan ditolak/dibatalkan, cek log)"]);
           } else {
             result.push([chName, r.title, "", "", "stream terikat tapi key tidak terbaca"]);
           }
@@ -2517,7 +2546,7 @@
         scheduledStartTime: startUtc
       },
       status: { privacyStatus: row.privacy, selfDeclaredMadeForKids: false },
-      contentDetails: { enableAutoStart: false, enableAutoStop: false }
+      contentDetails: { enableAutoStart: true, enableAutoStop: false }
     };
     var tags = row.tags ? row.tags.split(",").map(function(t){ return t.trim(); }).filter(Boolean) : [];
     var costUsed = COST.live.insert;
